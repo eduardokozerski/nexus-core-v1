@@ -2,6 +2,8 @@
 
 Nexus Core é uma plataforma administrativa concluída para pesquisa, priorização e acompanhamento de oportunidades em marketplaces. Ela transforma sinais públicos dispersos em uma fila de análise clara, auditável e pronta para decisões humanas.
 
+O projeto nasceu como uma ferramenta interna e passou por várias iterações ligadas ao ambiente de operação. Ao preparar uma versão pública para portfólio, consolidei a entrega em um commit inicial limpo, removendo referências internas, documentação operacional e configurações que não faziam parte da versão demonstrável.
+
 ## Resultado entregue
 
 O sistema reduziu o trabalho manual de pesquisa ao centralizar a descoberta de produtos, a coleta de dados autorizados, o histórico de execuções e a exportação de candidatos. A equipe passou a trabalhar com critérios consistentes, evidências visíveis e uma trilha de decisão por item.
