@@ -1,0 +1,266 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Marketplace {
+  MERCADO_LIVRE
+  SHOPEE
+}
+
+enum MercadoLivreAuthorizationStatus {
+  ACTIVE
+  REAUTH_REQUIRED
+  REVOKED
+}
+
+enum SearchStrategy {
+  KEYWORD_SEARCH
+  RADAR_DISCOVERY
+}
+
+enum SearchTermStatus {
+  ACTIVE
+  PAUSED
+}
+
+enum CollectionSource {
+  OFFICIAL_API
+  PUBLIC_PAGE
+  HYBRID
+}
+
+enum CollectionRunStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  PARTIAL
+  FAILED
+  BLOCKED
+}
+
+enum HumanDecisionStatus {
+  VALIDATED
+  REJECTED
+}
+
+enum RadarPreferenceKind {
+  PREFERRED
+  BANNED
+}
+
+enum RadarCategoryStatus {
+  EXPLORATORY
+  PRIORITY
+  PAUSED
+  DISCARDED
+}
+
+enum RadarFocusArea {
+  HOME
+  MOBILE
+  TOYS
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model MercadoLivreAuthorization {
+  id                    String                         @id @default(uuid())
+  sellerId              String                         @unique
+  accessTokenCiphertext String
+  refreshTokenCiphertext String
+  accessTokenExpiresAt  DateTime
+  status                MercadoLivreAuthorizationStatus @default(ACTIVE)
+  lastRefreshAt         DateTime?
+  lastRefreshError      String?
+  createdAt             DateTime                       @default(now())
+  updatedAt             DateTime                       @updatedAt
+
+  @@index([status, accessTokenExpiresAt])
+}
+
+model SearchTerm {
+  id                String           @id @default(uuid())
+  marketplace       Marketplace
+  keyword           String
+  normalizedKeyword String
+  strategy          SearchStrategy   @default(KEYWORD_SEARCH)
+  status            SearchTermStatus @default(ACTIVE)
+  notes             String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  collectionRuns    CollectionRun[]
+
+  @@unique([marketplace, normalizedKeyword, strategy])
+  @@index([status, updatedAt])
+}
+
+model CollectionRun {
+  id                   String              @id @default(uuid())
+  externalRunKey       String              @unique
+  searchTermId         String
+  marketplace          Marketplace
+  source               CollectionSource
+  status               CollectionRunStatus
+  scoreVersion         String?
+  viabilityRuleVersion String?
+  startedAt            DateTime
+  finishedAt           DateTime?
+  errorMessage         String?
+  summary              Json?
+  rawReport            Json?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  searchTerm           SearchTerm          @relation(fields: [searchTermId], references: [id], onDelete: Restrict)
+  snapshots            ListingSnapshot[]
+  humanDecisions       HumanDecision[]
+
+  @@index([searchTermId, startedAt])
+  @@index([status, startedAt])
+}
+
+model Listing {
+  id               String            @id @default(uuid())
+  marketplace      Marketplace
+  externalId       String
+  catalogProductId String?
+  userProductId    String?
+  domainId         String?
+  url              String?
+  listingUrl       String?
+  title            String
+  imageUrl         String?
+  sellerName       String?
+  brand            String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  snapshots        ListingSnapshot[]
+  humanDecisions   HumanDecision[]
+
+  @@unique([marketplace, externalId])
+  @@index([title])
+  @@index([domainId])
+}
+
+model ListingSnapshot {
+  id                String            @id @default(uuid())
+  listingId         String
+  collectionRunId   String
+  radarCategoryId   String?
+  searchPosition    Int?
+  minimumPrice      Decimal?          @db.Decimal(12, 2)
+  price             Decimal?          @db.Decimal(12, 2)
+  maximumPrice      Decimal?          @db.Decimal(12, 2)
+  currencyId        String?
+  offerCount        Int?
+  uniqueSellerCount Int?
+  ratingAverage     Decimal?          @db.Decimal(3, 2)
+  reviewCount       Int?
+  opportunityScore  Int?
+  priorityLabel     String?
+  viabilityStatus   String?
+  flags             Json?
+  reasons           Json?
+  rawData           Json
+  collectedAt       DateTime
+  createdAt         DateTime          @default(now())
+  listing           Listing           @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  collectionRun     CollectionRun     @relation(fields: [collectionRunId], references: [id], onDelete: Cascade)
+  radarCategory     RadarCategory?     @relation(fields: [radarCategoryId], references: [id], onDelete: SetNull)
+  score             OpportunityScore?
+
+  @@unique([listingId, collectionRunId])
+  @@index([collectionRunId, opportunityScore])
+  @@index([listingId, collectedAt])
+  @@index([radarCategoryId, collectedAt])
+}
+
+model OpportunityScore {
+  id                String          @id @default(uuid())
+  listingSnapshotId String          @unique
+  version           String
+  totalScore        Int
+  demandScore       Int
+  competitionScore  Int
+  priceScore        Int
+  sellerScore       Int             @default(0)
+  riskScore         Int
+  components        Json
+  reasons           Json
+  createdAt         DateTime        @default(now())
+  listingSnapshot   ListingSnapshot @relation(fields: [listingSnapshotId], references: [id], onDelete: Cascade)
+}
+
+model HumanDecision {
+  id                  String              @id @default(uuid())
+  externalDecisionKey String              @unique
+  listingId           String
+  collectionRunId     String?
+  radarCategoryId     String?
+  status              HumanDecisionStatus
+  notes               String
+  source              String              @default("user_text")
+  decidedAt           DateTime            @default(now())
+  createdAt           DateTime            @default(now())
+  listing             Listing             @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  collectionRun       CollectionRun?      @relation(fields: [collectionRunId], references: [id], onDelete: SetNull)
+  radarCategory       RadarCategory?       @relation(fields: [radarCategoryId], references: [id], onDelete: SetNull)
+
+  @@index([listingId, decidedAt])
+  @@index([status, decidedAt])
+  @@index([radarCategoryId, status])
+}
+
+model RadarPreference {
+  id             String              @id @default(uuid())
+  kind           RadarPreferenceKind
+  term           String
+  normalizedTerm String
+  reason         String?
+  active         Boolean             @default(true)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@unique([kind, normalizedTerm])
+  @@index([active, kind])
+}
+
+model RadarCategory {
+  id               String              @id @default(uuid())
+  marketplace      Marketplace         @default(MERCADO_LIVRE)
+  externalId       String
+  name             String
+  focusArea        RadarFocusArea
+  status           RadarCategoryStatus @default(EXPLORATORY)
+  parentExternalId String?
+  depth            Int                 @default(0)
+  isLeaf           Boolean?
+  focusScore       Int                 @default(0)
+  priorityScore    Int                 @default(0)
+  scanCount        Int                 @default(0)
+  candidateCount   Int                 @default(0)
+  path             Json?
+  rationale        String?
+  source           String              @default("official_category_tree")
+  expandedAt       DateTime?
+  lastScannedAt    DateTime?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  snapshots        ListingSnapshot[]
+  humanDecisions   HumanDecision[]
+
+  @@unique([marketplace, externalId])
+  @@index([status, isLeaf, priorityScore])
+  @@index([focusArea, expandedAt, depth])
+}
